@@ -1,0 +1,1 @@
+py installer --onefile --noconsole bot.py

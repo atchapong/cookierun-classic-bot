@@ -1,0 +1,20 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Build and Dist folders (จากการรัน PyInstaller)
+build/
+dist/
+*.spec
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+.vscode
