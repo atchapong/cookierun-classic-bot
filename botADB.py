@@ -102,7 +102,12 @@ def capture_background_autosize(hwnd):
         dataBitMap = win32ui.CreateBitmap()
         dataBitMap.CreateCompatibleBitmap(dcObj, width, height)
         cDC.SelectObject(dataBitMap)
-        cDC.BitBlt((0, 0), (width, height), dcObj, (0, 0), win32con.SRCCOPY)
+        
+        # 🎯 BUGFIX: บังคับดึงภาพจากการ์ดจอสำหรับคอมพิวเตอร์รุ่นใหม่ (Hardware Accelerated)
+        result = ctypes.windll.user32.PrintWindow(hwnd, cDC.GetSafeHdc(), 3)
+        if result != 1: # ถ้าดึงแบบใหม่ไม่สำเร็จ ให้กลับไปใช้แบบเก่า
+            cDC.BitBlt((0, 0), (width, height), dcObj, (0, 0), win32con.SRCCOPY)
+            
         signedIntsArray = dataBitMap.GetBitmapBits(True)
         img = np.frombuffer(signedIntsArray, dtype='uint8')
         img.shape = (height, width, 4)
