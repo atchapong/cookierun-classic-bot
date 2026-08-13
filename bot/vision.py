@@ -48,24 +48,32 @@ class VisionBot:
 
     def preload_templates(self, current_screen_width, logger=None):
         scale = current_screen_width / self.TEMPLATE_BASE_WIDTH
-        image_list = [
-            "id_surprise.png", "id_result.png", "id_item.png", "btn_confirm.png", 
-            "id_lobby.png", "btn_play.png", "btn_ok.png", "id_playing.png", 
-            "item_boost.png", "item_relay.png", "btn_open_all.png", "btn_mystery_box_confirm.png",
-            "buff_coin.png", "red_box.png", "btn_multi.png", "btn_multi_buy.png", 
-            "crystal_warning.png", "btn_cancel.png" 
-        ]
         if logger: logger(f"🔄 โหลด AI Vision (Scale: {scale:.2f})...")
         self.cached_templates.clear() 
         missing_count = 0
         
+        # 🌟 1. ดึง Path ของโฟลเดอร์ image (โดยส่งค่า string ว่างเข้าไป)
+        image_dir = self.resource_path("") 
+        
+        # เช็กก่อนว่ามีโฟลเดอร์นี้อยู่จริงไหม
+        if not os.path.exists(image_dir):
+            if logger: logger(f"❌ ไม่พบโฟลเดอร์รูปภาพที่: {image_dir}")
+            return
+
+        # 🌟 2. [DYNAMIC] สแกนหาไฟล์ .png ทั้งหมดในโฟลเดอร์มาใส่ List อัตโนมัติ!
+        image_list = [f for f in os.listdir(image_dir) if f.lower().endswith('.png')]
+        
+        if logger: logger(f"📂 สแกนพบรูปภาพในคลังทั้งหมด {len(image_list)} ไฟล์")
+
         for img_name in image_list:
-            path = self.resource_path(img_name) 
+            path = os.path.join(image_dir, img_name) 
+            
             if os.path.exists(path):
                 img_array = np.fromfile(path, np.uint8)
                 img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
                 
                 if img is not None:
+                    # ปรับขนาดภาพตามจอ แล้วยัดลง Dictionary
                     new_w, new_h = int(img.shape[1] * scale), int(img.shape[0] * scale)
                     self.cached_templates[img_name] = cv2.resize(img, (new_w, new_h))
                 else:
@@ -73,7 +81,7 @@ class VisionBot:
                     if logger: logger(f"❌ รูปภาพเสียหาย/อ่านไม่ได้: {img_name}")
             else:
                 missing_count += 1
-                if logger: logger(f"❌ ไม่พบรูปภาพ: {path}") # โชว์ Path เต็มๆ ให้เห็นเลยว่าไปหาที่ไหน
+                if logger: logger(f"❌ ไม่พบรูปภาพ: {path}")
                 
         if missing_count > 0 and logger:
             logger(f"⚠️ บอทอาจเอ๋อ! ขาดไฟล์รูปทั้งหมด {missing_count} รูป")
@@ -148,13 +156,13 @@ class VisionBot:
             return None
 
     def get_current_page(self, frame, enable_item_page):
+        if self.find_template(frame, "btn_multi_buy.png", [0.6, 1.0, 0.2, 0.8], 0.75): return "MULTI_BUY_PAGE"
          # 🌟 เพิ่มบรรทัดนี้: หาปุ่มกากบาทปิด (X) หรือข้อความบนหัวหน้าต่างเพื่อน
         if self.find_template(frame, "btn_close_friend.png", [0.0, 0.25, 0.70, 1.0], 0.70): return "FRIEND_INFO_POPUP"
         if self.find_template(frame, "id_surprise.png", [0.0, 0.20, 0.2, 0.8], 0.70): return "SURPRISE_CAPTCHA"
         if self.find_template(frame, "crystal_warning.png", [0.2, 0.8, 0.2, 0.8], 0.75): return "CRYSTAL_WARNING_POPUP"
         if self.find_template(frame, "item_boost.png", [0.0, 1.0, 0.0, 1.0], 0.60): return "BOOST_POPUP"
         if self.find_template(frame, "item_relay.png", [0.0, 1.0, 0.0, 1.0], 0.60): return "RELAY_POPUP"
-        if self.find_template(frame, "btn_multi_buy.png", [0.6, 1.0, 0.2, 0.8], 0.75): return "MULTI_BUY_PAGE"
         if self.find_template(frame, "btn_open_all.png", [0.70, 0.95, 0.35, 0.65], 0.75): return "MYSTERY_BOX_MAIN_PAGE"
         if self.find_template(frame, "btn_mystery_box_confirm.png", [0.75, 0.95, 0.40, 0.60], 0.75): return "MYSTERY_BOX_CONFIRM_PAGE"
         if self.find_template(frame, "id_result.png", [0.0, 0.25, 0.3, 0.7], 0.70): return "RESULT_PAGE"

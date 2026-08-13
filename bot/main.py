@@ -45,14 +45,14 @@ root.title("Cookie Run AI Bot - V44.1 (Multi-Instance / Fix Layout & Friend Bug)
 root.geometry("920x620")
 root.resizable(False, False)
 
-show_preview_var = ctk.BooleanVar(value=True)
+show_preview_var = ctk.BooleanVar(value=False)
 enable_item_page_var = ctk.BooleanVar(value=True)
-use_boost_var = ctk.BooleanVar(value=True) # 🌟 เอากลับมาแล้วสำหรับแบบ B
+use_boost_var = ctk.BooleanVar(value=False) # 🌟 เอากลับมาแล้วสำหรับแบบ B
 target_boost_var = ctk.StringVar(value="❌ ไม่ซื้อ Boost")    
-use_relay_var = ctk.BooleanVar(value=True)       
-auto_gacha_var = ctk.BooleanVar(value=True) 
+use_relay_var = ctk.BooleanVar(value=False) # 🌟 เพิ่มสวิตช์คุกกี้ตัวผลัด    
 min_delay_var = ctk.StringVar(value="8.0")
 max_delay_var = ctk.StringVar(value="10.0")
+gacha_mode_var = ctk.StringVar(value="สุ่มแบบ Multi") # 🌟 ตัวแปรเก็บโหมดการสุ่ม
 
 def log_msg(msg):
     timestamp = time.strftime("[%H:%M:%S] ")
@@ -160,9 +160,12 @@ class BotWorker(threading.Thread):
                 if current_page in ["BOOST_POPUP", "RELAY_POPUP", "ANY_CONFIRM_POPUP", "SURPRISE_CAPTCHA", "CRYSTAL_WARNING_POPUP"]:
                     next_click_allowed_time = 0.0 
                     
-            if current_page == "ITEM_PAGE" and auto_gacha_var.get() and next_click_allowed_time > current_time + 3.0:
-                if self.vision.find_template(frame, "buff_coin.png", [0.4, 0.9, 0.2, 0.8], 0.75):
-                    log_msg(f"⚡ [{self.d_name}] สุ่มเสร็จแล้ว! ลุยต่อทันที!")
+            target_boost_name = target_boost_var.get()
+            
+            if current_page == "ITEM_PAGE" and target_boost_name != "❌ ไม่ซื้อ Boost" and next_click_allowed_time > current_time + 3.0:
+                target_img = BOOST_MAP.get(target_boost_name, "none")
+                if target_img != "none" and self.vision.find_template(frame, target_img, [0.4, 0.9, 0.2, 0.8], 0.75):
+                    log_msg(f"⚡ [{self.d_name}] สุ่มได้ {target_boost_name} แล้ว! ลุยต่อทันที!")
                     next_click_allowed_time = 0.0
             
             if current_page == "SURPRISE_CAPTCHA":
@@ -183,17 +186,17 @@ class BotWorker(threading.Thread):
             elif current_page == "FRIEND_INFO_POPUP":
                 log_msg(f"⚠️ [{self.d_name}] เผลอเปิดหน้าเพื่อน! สั่งปุ่ม Back ย้อนกลับ...")
                 
-                # ใช้ adb_command สั่ง input keyevent 4 ตรงๆ ไปที่จอนั้น
-                device_id = self.ctrl.devices[self.device_index]
-                self.ctrl.adb_command(f"-s {device_id} shell input keyevent 4")
+                # 🎯 แก้บั๊กโค้ดพัง: เรียกใช้ adb_device.shell เพื่อสั่งกดปุ่ม Back ตรงๆ
+                if self.ctrl.adb_device:
+                    self.ctrl.adb_device.shell("input keyevent 4")
                 
                 # หน่วงเวลา 1.5 วินาที ให้หน้าต่างเพื่อนมันปิดลงจนสนิท ก่อนรันรอบต่อไป
                 last_action_time, next_click_allowed_time = current_time, current_time + 1.5
                 continue
                 
             elif current_page == "CRYSTAL_WARNING_POPUP":
-                log_msg(f"⚠️ [{self.d_name}] เงินหมด! ปิดโหมด Multi-Buy อัตโนมัติ!")
-                auto_gacha_var.set(False)
+                log_msg(f"⚠️ [{self.d_name}] เงินหมด! เปลี่ยนเป็นโหมด 'ไม่ซื้อ Boost' อัตโนมัติ!")
+                target_boost_var.set("❌ ไม่ซื้อ Boost") # 🌟 สั่งเซ็ตดรอปดาวน์เป็นไม่ซื้อ
                 cancel_match = self.vision.find_template(frame, "btn_cancel.png", [0.4, 0.9, 0.2, 0.8], 0.70)
                 if cancel_match: self.ctrl.click(cancel_match[0], cancel_match[1], width, height)
                 else: self.ctrl.click(int(width * 0.42), int(height * 0.62), width, height)
@@ -201,27 +204,21 @@ class BotWorker(threading.Thread):
                 continue
 
             elif current_page == "BOOST_POPUP":
-                target_boost_name = target_boost_var.get()
-                
-                # เช็กทั้งสวิตช์เปิด/ปิด และ เมนูว่าไม่ได้เลือก "ไม่ซื้อ"
-                if use_boost_var.get() and target_boost_name != "❌ ไม่ซื้อ Boost":
-                    target_img = BOOST_MAP.get(target_boost_name)
-                    
-                    if self.vision.find_template(frame, target_img, [0.2, 0.8, 0.2, 0.8], 0.70):
-                        log_msg(f"✨ [{self.d_name}] ได้บูสเตอร์: {target_boost_name} พร้อมลุย!")
-                        self.ctrl.click(int(width * 0.78), int(height * 0.25), width, height)
-                        last_action_time, next_click_allowed_time = current_time, current_time + 1.0 
-                    else:
-                        log_msg(f"🔄 [{self.d_name}] กำลังสุ่มหา {target_boost_name}...")
-                        match_loc = self.vision.find_template(frame, "btn_buy_boost.png", [0.0, 1.0, 0.0, 1.0], 0.60)
-                        if match_loc: 
-                            self.ctrl.click(match_loc[0], match_loc[1], width, height)
-                        else: 
-                            self.ctrl.click(int(width * 0.50), int(height * 0.50), width, height)
-                        last_action_time, next_click_allowed_time = current_time, current_time + 1.5 
+                # 🌟 ทำหน้าที่จัดการ "ป๊อปอัปบูสเตอร์สีฟ้า" ตอนเริ่มด่านเท่านั้น!
+                if use_boost_var.get():
+                    log_msg(f"🚀 [{self.d_name}] กดใช้บูสเตอร์ด่าน (สีฟ้า)!")
+                    # ค้นหาปุ่มกดใช้/ซื้อ หรือ จิ้มตรงกลางป๊อปอัป
+                    match_loc = self.vision.find_template(frame, "btn_buy_boost.png", [0.2, 0.8, 0.4, 0.8], 0.60)
+                    if match_loc: 
+                        self.ctrl.click(match_loc[0], match_loc[1], width, height)
+                    else: 
+                        self.ctrl.click(int(width * 0.50), int(height * 0.50), width, height)
                 else:
+                    log_msg(f"❌ [{self.d_name}] ปิดสวิตช์บูสเตอร์ด่านอยู่ กดปุ่ม X ข้าม...")
+                    # จิ้มมุมขวาบนของป๊อปอัป (ปุ่มกากบาท X)
                     self.ctrl.click(int(width * 0.78), int(height * 0.25), width, height)
-                    last_action_time, next_click_allowed_time = current_time, current_time + 1.0 
+                
+                last_action_time, next_click_allowed_time = current_time, current_time + 1.0 
                 continue
 
             elif current_page == "RELAY_POPUP":
@@ -268,30 +265,78 @@ class BotWorker(threading.Thread):
                     last_action_time, next_click_allowed_time = current_time, current_time + random_wait
                         
                 elif current_page == "ITEM_PAGE":
-                    if auto_gacha_var.get():
-                        if self.vision.find_template(frame, "buff_coin.png", [0.4, 0.9, 0.2, 0.8], 0.75):
+                    target_boost_name = target_boost_var.get()
+                    
+                    # 🌟 1. ถ้าเลือกบัฟเอาไว้ ให้ลุยสุ่มกาชา
+                    if target_boost_name != "❌ ไม่ซื้อ Boost":
+                        target_img = BOOST_MAP.get(target_boost_name, "none")
+                        
+                        # 1.1 เจอรูปบัฟที่ต้องการแล้ว -> กด Play
+                        if target_img != "none" and self.vision.find_template(frame, target_img, [0.4, 0.9, 0.2, 0.8], 0.75):
                             match = self.vision.find_template(frame, "btn_play.png", [0.70, 0.95, 0.60, 0.95], 0.65)
                             if match: self.ctrl.click(match[0], match[1], width, height)
                             else: self.ctrl.click(int(width * 0.82), int(height * 0.85), width, height)
+                            last_action_time, next_click_allowed_time = current_time, current_time + random_wait
+                            
+                        # 1.2 ยังไม่เจอรูปบัฟ -> ต้องสุ่มใหม่ หรือ กำลังสุ่มอยู่
                         else:
-                            multi = self.vision.find_template(frame, "btn_multi.png", [0.3, 0.9, 0.5, 1.0], 0.70)
-                            if multi: self.ctrl.click(multi[0], multi[1], width, height)
+                            # 🎯 เช็กโหมดสุ่มว่าเถ้าแก่เลือกแบบไหนไว้
+                            if gacha_mode_var.get() == "สุ่มแบบ Multi":
+                                multi = self.vision.find_template(frame, "btn_multi.png", [0.3, 0.9, 0.5, 1.0], 0.70)
+                                if multi: 
+                                    self.ctrl.click(multi[0], multi[1], width, height)
+                                    # 🌟 ปรับเป็น 20 วิ ตามที่เถ้าแก่สั่ง!
+                                    last_action_time, next_click_allowed_time = current_time, current_time + 20.0
+                                else:
+                                    red = self.vision.find_template(frame, "red_box.png", [0.3, 0.9, 0.2, 0.8], 0.70)
+                                    if red: 
+                                        self.ctrl.click(red[0], red[1], width, height)
+                                        last_action_time, next_click_allowed_time = current_time, current_time + 2.0
+                                    else:
+                                        next_click_allowed_time = current_time + 0.5 
+                                        
                             else:
-                                red = self.vision.find_template(frame, "red_box.png", [0.3, 0.9, 0.2, 0.8], 0.70)
-                                if red: self.ctrl.click(red[0], red[1], width, height)
-                                else: self.ctrl.click(int(width * 0.82), int(height * 0.55), width, height)
+                                # ☝️ โหมดสุ่มทีละอัน (Single-buy)
+                                confirm_buy = self.vision.find_template(frame, "btn_buy_confirm.png", [0.4, 0.9, 0.4, 0.85], 0.70)
+                                if confirm_buy:
+                                    log_msg(f"✅ [{self.d_name}] กดยืนยันสุ่มกาชาทับของเดิม!")
+                                    self.ctrl.click(confirm_buy[0], confirm_buy[1], width, height)
+                                    last_action_time, next_click_allowed_time = current_time, current_time + 1.5
+                                else:
+                                    single_buy = self.vision.find_template(frame, "btn_buy_single.png", [0.2, 0.8, 0.4, 0.9], 0.70)
+                                    if single_buy: 
+                                        self.ctrl.click(single_buy[0], single_buy[1], width, height)
+                                        last_action_time, next_click_allowed_time = current_time, current_time + 1.5
+                                    else: 
+                                        # 🎯 แก้บั๊ก: เพิ่มการสแกนหา "กล่องแดง" ก่อน!
+                                        red = self.vision.find_template(frame, "red_box.png", [0.3, 0.9, 0.2, 0.8], 0.70)
+                                        if red: 
+                                            self.ctrl.click(red[0], red[1], width, height)
+                                            last_action_time, next_click_allowed_time = current_time, current_time + 2.0
+                                        else:
+                                            self.ctrl.click(int(width * 0.50), int(height * 0.70), width, height)
+                                            last_action_time, next_click_allowed_time = current_time, current_time + random_wait
+                    
+                    # 🌟 2. ถ้าเลือก "ไม่ซื้อ" ให้กดข้ามไปปุ่ม Play ทันที
                     else:
                         match = self.vision.find_template(frame, "btn_play.png", [0.70, 0.95, 0.60, 0.95], 0.65)
                         if match: self.ctrl.click(match[0], match[1], width, height)
                         else: self.ctrl.click(int(width * 0.82), int(height * 0.85), width, height)
-                    last_action_time, next_click_allowed_time = current_time, current_time + random_wait
+                        last_action_time, next_click_allowed_time = current_time, current_time + random_wait
 
+                # ==========================================
+                # 🌟 เอาโค้ดที่หายไปกลับคืนมา วางต่อจาก ITEM_PAGE เลยครับ!
+                # ==========================================
                 elif current_page == "MULTI_BUY_PAGE":
                     match = self.vision.find_template(frame, "btn_multi_buy.png", [0.6, 1.0, 0.2, 0.8], 0.75)
                     if match:
+                        log_msg(f"🎰 [{self.d_name}] กดปุ่มยืนยัน Multi-Buy!")
                         self.ctrl.click(match[0], match[1], width, height)
-                        next_click_allowed_time = current_time + 90.0 
-                    else: next_click_allowed_time = current_time + random_wait
+                        # 🌟 ปรับเวลาจาก 90 วิ เหลือแค่ 2 วิ บอทจะได้กดรัวๆ!
+                        next_click_allowed_time = current_time + 2.0 
+                    else: 
+                        self.ctrl.click(int(width * 0.50), int(height * 0.80), width, height)
+                        next_click_allowed_time = current_time + random_wait
                     last_action_time = current_time
 
                 elif current_page in ["MYSTERY_BOX_MAIN_PAGE", "MYSTERY_BOX_CONFIRM_PAGE"]:
@@ -301,7 +346,6 @@ class BotWorker(threading.Thread):
                     last_action_time, next_click_allowed_time = current_time, current_time + random_wait
                         
                 elif current_page == "ANY_CONFIRM_POPUP":
-                    # 🌟 ใช้แค่ find_template เทียบรูปปุ่ม Confirm เท่านั้น ไม่เอาสีเขียวแล้ว!
                     match = self.vision.find_template(frame, "btn_confirm.png", [0.40, 0.95, 0.20, 0.80], 0.70)
                     if match: 
                         self.ctrl.click(match[0], match[1], width, height)
@@ -402,9 +446,13 @@ ctk.CTkSwitch(switch_frame, text="🚀 ใช้บูสเตอร์ด่�
 boost_combo = ctk.CTkComboBox(switch_frame, values=list(BOOST_MAP.keys()), variable=target_boost_var, width=160)
 boost_combo.grid(row=1, column=1, padx=10, pady=5, sticky="w")
 
-# Row 2: สวิตช์คุกกี้ตัวผลัด และ ออโต้ Multi-Buy
+# Row 2: สวิตช์คุกกี้ตัวผลัด (ลบ Auto Gacha เดิมออกไปแล้ว)
 ctk.CTkSwitch(switch_frame, text="🔄 ใช้คุกกี้ตัวผลัด", variable=use_relay_var).grid(row=2, column=0, padx=10, pady=5, sticky="w")
-ctk.CTkSwitch(switch_frame, text="🎰 ออโต้ Multi-Buy", variable=auto_gacha_var).grid(row=2, column=1, padx=10, pady=5, sticky="w")
+
+# 🌟 Row 3 (เพิ่มใหม่): เลือกโหมดสุ่มกาชา
+ctk.CTkLabel(switch_frame, text="⚙️ โหมดสุ่มกาชา:").grid(row=3, column=0, padx=10, pady=5, sticky="w")
+gacha_mode_combo = ctk.CTkComboBox(switch_frame, values=["สุ่มแบบ Multi", "สุ่มทีละอัน"], variable=gacha_mode_var, width=160)
+gacha_mode_combo.grid(row=3, column=1, padx=10, pady=5, sticky="w")
 
 status_frame = ctk.CTkFrame(left_panel, fg_color="transparent")
 status_frame.pack(fill="x", padx=10, pady=5)
